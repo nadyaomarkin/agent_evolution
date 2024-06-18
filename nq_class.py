@@ -121,8 +121,9 @@ class Network:
     # network's output to the environment.
     # read the output value of the designated envorinment node
     # the two modes are 'queue' and 'tag'
-    # when it's 'queue', we scan the queue for message with destination tag = source
+    # when it's 'queue', we scan the queue for message with destination tag = source, default env tag is '00000'
     # when it's 'tag', we scan the population for the node with tag = source, and read its output value. or state value - to be decided
+    # in either case, we return the output value of either a q-node or n-node. 
     def nw_output_to_env(self, source = '00000', source_mode = 'queue'):
 
         if source_mode == 'queue':
@@ -132,26 +133,28 @@ class Network:
                 if tag == source:
                     print('eoeo output for env found', self.queue[tag])
                     # use the first output value in the list and pop the queue of that value
-                    output_value = self.queue[tag][0]
+                    output_q_node = self.queue[tag][0]
                     print('eoeo env tag has entries', self.queue[tag])
+                    output_string_value = output_q_node.output_value # todo ratrat check if using input or output_value. 
 
-                    self.queue_pop(source, output_value)
+                    self.queue_pop(source, output_q_node)
                     # typechecking for binary string for output
-
-                else:
-                    return None
-                
+                    return output_string_value
+               
         elif source_mode == 'tag':
             #the source gives the node whose output we want to read
             for vertex in self.population:
                 if vertex.tag_value == source:
-
+                    print('eoeo output for env found in NN', vertex.output_value)
                     return vertex.output_value
                 # try instead the state of the output value
                     # return vertex.state
+                
+        # if didn't find a match in one of for-loops above, return empty string
+        return '00'
+    
 
-        return False
-        
+
 
 
         
@@ -243,13 +246,6 @@ class Network:
 
 
 
-
-
-
-
-
-
-
     def add_vertex(self):
         new_vertex = self.create_vertex()
         return new_vertex
@@ -323,37 +319,79 @@ class Network:
 
         # will rewrite: instead of input_value we now want queue to be populated with q-nodes. 
 
-        input_value = self.queue_search(vertex_tag)        # this is a list of values sent to vertex_tag
+        qnodes = self.queue_search(vertex_tag)     # this is a list of qnodes
 
 
-
-        if input_value == False or len(input_value) == 0:
+        if qnodes == False or len(qnodes) == 0:
             # the vertex is not in the queue
             return
        #                                 set the input as the first element of the list
         
-
-
-        input_q_node = input_value[0] # input_value is now a list of q-nodes. 
+        input_q_node = qnodes[0] # input_value is now a list of q-nodes. 
 
 
         # remove the value from the queue
-        self.queue_pop(vertex_tag, input_value)
+        self.queue_pop(vertex_tag, qnodes) # todo 
 
-        # now we have joint action. vertex, input_q_node --> vertex', output_q_node
-        # for now use identity. 
-        output_q_node = input_q_node
-        new_vertex = vertex 
+        new_n_node, new_q_node = self.joint_action(n_node = vertex, 
+                                                   q_node = input_q_node)
+
+        # testing, leave unchanged
+        # new_n_node = copy.deepcopy(vertex)
+        # new_q_node = copy.deepcopy(input_q_node)
+
+
+
         # update the vertex to vertex' by substituting vertex' in the population
-        self.population[self.population.index(vertex)] = new_vertex
+        self.population[self.population.index(vertex)] = new_n_node
         #update the queue
-        new_tag = vertex.tag_value
-        self.queue_update(new_tag, output_q_node)
+        self.queue_update(new_q_node.tag_value, new_q_node)
 
         vertex.update_node()
 
 
         
+
+# put the joint action parts into a separate method, which given two nodes 
+        # n-node and q-node, returns copies of new n-node' , q-node'
+    def joint_action(self, n_node, q_node):
+        vertex = n_node
+        # now we have joint action. vertex, input_q_node --> vertex', output_q_node
+        # for now use identity. 
+        output_q_node = q_node
+        new_vertex = copy.deepcopy(vertex) 
+
+        # step 1. update each tag according the the tag-rule
+        new_vertex.update_tag()
+        # alternatively can pass a different rule e.g. 
+        new_vertex.update_tag(update_rule = output_q_node.data_arithmetic_rule_tag)
+        output_q_node.update_tag()
+
+        # update the node's tag-rule using the q-nodes tag-rule
+        new_vertex.update_rule(rule_to_apply = output_q_node.data_arithmetic_rule_tag, 
+                               rule_to_update = 'tag')
+
+
+        # push the q-nodes value into the vertex node. 
+        # print input, output attributes of output_q_node
+        print('qnode qqxx has', 'input', output_q_node.input, 'output', output_q_node.output_value)
+        new_vertex.input = output_q_node.input
+        # update it using the new_vertex's native rule
+        # print 
+        print('output of new-vertex before update xxoo', new_vertex.output_value)
+
+        # new_vertex.update_output()
+
+        print('output of new-vertex after update xxoo', new_vertex.output_value)
+        # update vertice's output-rule using the q-nodes output-rule
+        new_vertex.update_rule(rule_to_apply = output_q_node.data_arithmetic_rule_output, 
+                               rule_to_update = 'output')
+        
+        # step 2. now they swap places. the new-vertex becomes the new q-node and vice versa. 
+        new_q_node = copy.deepcopy(new_vertex)
+        new_n_node = copy.deepcopy(output_q_node)
+
+        return new_n_node, new_q_node
 
 
 
